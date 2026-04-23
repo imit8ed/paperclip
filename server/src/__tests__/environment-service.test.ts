@@ -163,6 +163,43 @@ describeEmbeddedPostgres("environmentService leases", () => {
     expect(rows[0]?.name).toBe("Local");
   });
 
+  it("leaves an existing default local environment untouched", async () => {
+    const companyId = randomUUID();
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Acme",
+      status: "active",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const archivedAt = new Date("2025-01-01T00:00:00.000Z");
+    const [existing] = await db
+      .insert(environments)
+      .values({
+        companyId,
+        name: "Archived Local",
+        description: "Operator-managed local environment",
+        driver: "local",
+        status: "archived",
+        config: { shell: "zsh" },
+        metadata: { owner: "operator" },
+        createdAt: archivedAt,
+        updatedAt: archivedAt,
+      })
+      .returning();
+
+    const ensured = await svc.ensureLocalEnvironment(companyId);
+
+    expect(ensured.id).toBe(existing?.id);
+    expect(ensured.name).toBe("Archived Local");
+    expect(ensured.status).toBe("archived");
+    expect(ensured.metadata).toEqual({ owner: "operator" });
+
+    const rows = await db.select().from(environments).where(eq(environments.companyId, companyId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.updatedAt.toISOString()).toBe(archivedAt.toISOString());
+  });
+
   it("deduplicates concurrent default local environment creation", async () => {
     const companyId = randomUUID();
     await db.insert(companies).values({

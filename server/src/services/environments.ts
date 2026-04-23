@@ -128,16 +128,22 @@ export function environmentService(db: Db) {
           createdAt: now,
           updatedAt: now,
         })
-        .onConflictDoUpdate({
+        .onConflictDoNothing({
           target: [environments.companyId, environments.driver],
-          set: {
-            status: "active",
-            updatedAt: now,
-          },
         })
         .returning()
-        .then((rows) => rows[0]);
-      return toEnvironment(row);
+        .then((rows) => rows[0] ?? null);
+      if (row) return toEnvironment(row);
+
+      const existing = await db
+        .select()
+        .from(environments)
+        .where(and(eq(environments.companyId, companyId), eq(environments.driver, "local")))
+        .then((rows) => rows[0] ?? null);
+      if (!existing) {
+        throw new Error("Failed to ensure local environment");
+      }
+      return toEnvironment(existing);
     },
 
     create: async (companyId: string, input: CreateEnvironment): Promise<Environment> => {

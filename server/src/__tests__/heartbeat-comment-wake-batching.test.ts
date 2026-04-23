@@ -1171,6 +1171,26 @@ describe("heartbeat comment wake batching", () => {
         issueId,
         wakeReason: "issue_comment_mentioned",
       });
+
+      const primaryRuns = await db
+        .select()
+        .from(heartbeatRuns)
+        .where(eq(heartbeatRuns.agentId, primaryAgentId))
+        .orderBy(asc(heartbeatRuns.createdAt));
+      expect(primaryRuns).toHaveLength(1);
+      expect(primaryRuns[0]?.issueCommentStatus).toBe("not_applicable");
+
+      const missingCommentRetries = await db
+        .select()
+        .from(agentWakeupRequests)
+        .where(
+          and(
+            eq(agentWakeupRequests.companyId, companyId),
+            eq(agentWakeupRequests.agentId, primaryAgentId),
+            eq(agentWakeupRequests.reason, "missing_issue_comment"),
+          ),
+        );
+      expect(missingCommentRetries).toHaveLength(0);
     } finally {
       gateway.releaseFirstWait();
       await gateway.close();
